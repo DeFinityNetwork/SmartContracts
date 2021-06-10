@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MIT
-
-pragma solidity ^0.6.12;
+pragma solidity 0.6.12;
 
 import "@openzeppelin/contracts/GSN/Context.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/math/SafeMath.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "./external/IUniswapV2Router02.sol";
-import "./external/IUniswapV2Factory.sol";
+import "../external/IUniswapV2Router02.sol";
+import "../external/IUniswapV2Factory.sol";
 
 library DEFXConstants {
     string private constant _name = "DeFinity";
@@ -54,11 +53,10 @@ contract DEFX is Context, IERC20, Ownable {
     mapping (address => bool) private _openSender;
     mapping (address => uint256) private _lastTx;
 
-    constructor () public {
-        uniRouter = IUniswapV2Router02(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
-        uniFactory = IUniswapV2Factory(0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f);
-        launchPool = uniFactory.createPair(address(uniRouter.WETH()),address(this));
-        _balances[DEFXConstants.getTokenOwner()] = _totalSupply; 
+    constructor () 
+        public 
+    {
+        _balances[owner()] = _totalSupply; 
         emit Transfer(address(0), DEFXConstants.getTokenOwner(), _totalSupply);
     }
 
@@ -146,41 +144,6 @@ contract DEFX is Context, IERC20, Ownable {
     }
 
     modifier launchRestrict(address sender, address recipient, uint256 amount) {
-        if (_tradingTime == 0) {
-            if (balanceOf(launchPool) > 0) {
-                _tradingTime = now;
-                _restrictionLiftTime = now.add(10*60);
-                require(amount <= _maxRestrictionAmount, "DEFX: amount greater than max limit");
-                require(tx.gasprice <= _restrictionGas,"DEFX: gas price above limit");
-                if (!_isWhitelisted[sender] && !_isWhitelisted[recipient]) {
-                    require(_lastTx[sender].add(60) <= now && _lastTx[recipient].add(60) <= now, "DEFX: only one tx/min in restricted mode");
-                    _lastTx[sender] = now;
-                    _lastTx[recipient] = now;
-                } else if (!_isWhitelisted[recipient]){
-                    require(_lastTx[recipient].add(60) <= now, "DEFX: only one tx/min in restricted mode");
-                    _lastTx[recipient] = now;
-                } else if (!_isWhitelisted[sender]) {
-                    require(_lastTx[sender].add(60) <= now, "DEFX: only one tx/min in restricted mode");
-                    _lastTx[sender] = now;
-                }
-            } else {
-                require(_openSender[sender],"DEFX: transfers are disabled");
-            }
-        } else if (_tradingTime <= now && _restrictionLiftTime > now) {
-            require(amount <= _maxRestrictionAmount, "DEFX: amount greater than max limit");
-            require(tx.gasprice <= _restrictionGas,"DEFX: gas price above limit");
-            if (!_isWhitelisted[sender] && !_isWhitelisted[recipient]) {
-                require(_lastTx[sender].add(60) <= now && _lastTx[recipient].add(60) <= now, "DEFX: only one tx/min in restricted mode");
-                _lastTx[sender] = now;
-                _lastTx[recipient] = now;
-            } else if (!_isWhitelisted[recipient]){
-                require(_lastTx[recipient].add(60) <= now, "DEFX: only one tx/min in restricted mode");
-                _lastTx[recipient] = now;
-            } else if (!_isWhitelisted[sender]) {
-                require(_lastTx[sender].add(60) <= now, "DEFX: only one tx/min in restricted mode");
-                _lastTx[sender] = now;
-            }
-        }
         _;
     }
 }
