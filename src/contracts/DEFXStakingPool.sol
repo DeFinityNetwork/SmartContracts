@@ -33,6 +33,10 @@ contract DEFXStakingPool is Ownable {
     // Owner configuration
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+    /**
+     * @notice Allows contract owner to change annual interest rate. Reward earned up to that moment is calculated
+     * using previous interest rate.
+     */
     function setAnnualInterestRate(uint _interestRate)
         external
         onlyOwner
@@ -41,6 +45,10 @@ contract DEFXStakingPool is Ownable {
         annualInterestRate = _interestRate;
     }
 
+    /**
+     * @notice Allows contract owner to change reward time span. Reward earned up to that moment is calculated using
+     * previous timespan.
+     */
     function setRewardTimeSpan(uint _timeSpan)
         external
         onlyOwner
@@ -49,6 +57,11 @@ contract DEFXStakingPool is Ownable {
         rewardTimeSpan = _timeSpan;
     }
 
+    /**
+     * @notice Allows contract owner to withdraw any DEFX balance from the contract which exceeds minimum needed DEFX
+     * balance. Minimum DEFX balance is calculated as a sum of all staked DEFX and reward that would be earned in the
+     * next year with the current annual interest rate.
+     */
     function withdrawUnusedBalance(uint _amount)
         external
         onlyOwner
@@ -61,6 +74,14 @@ contract DEFXStakingPool is Ownable {
     // Staking
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+    /**
+     * @notice Allows any DEFX holder to stake certain amount of DEFX and earn reward. Reward is calculated based on
+     * the annual interest rate specified by annualInterestRate attribute and paid on basis specified by rewardTimeSpan
+     * attribute (daily, weekly, etc.). There is no automatic transfer of the reward, but stakers should redeem reward
+     * instead.
+     * Pre-condition for staking of DEFX is that the staker should approve address of this smart contract to spend
+     * their DEFX.
+     */
     function stake(uint _amount) 
         external
     {
@@ -76,6 +97,11 @@ contract DEFXStakingPool is Ownable {
         totalStakedBalances[_msgSender()] = totalStakedBalances[_msgSender()].add(_amount);
     }
 
+    /**
+     * @notice Allows any DEFX holder who has previously staked DEFX to unstake it, up to the amount specified by input
+     * parameter. All reward earned up to that moment is calculated and needs to be redeemed sperately from unstaking.
+     * It can be done any time before or any time after unstaking.
+     */
     function unstake(uint _amount) 
         external
     {
@@ -109,6 +135,9 @@ contract DEFXStakingPool is Ownable {
     // Redeeming reward
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+    /**
+     * @notice Allows token owner to transfer earned reward to the staker.
+     */
     function redeemRewardToStaker(address _staker, uint _amount)
         external
         onlyOwner
@@ -116,6 +145,9 @@ contract DEFXStakingPool is Ownable {
         redeemReward(_staker, _amount);
     }
 
+    /**
+     * @notice Allows staker to transfer earned reward to themselves.
+     */
     function redeemReward(uint _amount)
         external
     {
@@ -163,6 +195,9 @@ contract DEFXStakingPool is Ownable {
     // Reading functions
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+    /**
+     * @return Earned reward for the staker up to that moment for specified staker's address
+     */
     function getEarnedReward(address _staker)
         public
         view
@@ -181,6 +216,9 @@ contract DEFXStakingPool is Ownable {
         return totalAmount;
     }
 
+    /**
+     * @return Staked amount of DEFX for specified staker's address
+     */
     function getStakedAmount(address _staker)
         external
         view
@@ -193,6 +231,12 @@ contract DEFXStakingPool is Ownable {
     // Helper functions
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
+    /**
+     * @dev Calculates reward based on the DEFX amount that is staked and the moment in time when it is staked.
+     * It first calculates number of periods (i.e weeks) passed between now and time when DEFX amount is staked 
+     * (timeSpanUnits). Then, it calculates interest rate for that period (i.e. weekly interest rate) as 
+     * unitInterestRate. Finally reward is equal to period interest rate x staked amount x number of periods.
+     */
     function calculateReward(uint _time, uint _amount) 
         private
         view
@@ -212,6 +256,9 @@ contract DEFXStakingPool is Ownable {
         return totalStakedAmount + expectedAnnualRewards;
     }
 
+    /**
+     * @dev Calculates beginning of the current period for which reward is still not calculated.
+     */
     function getNewTime(uint _time)
         private
         view
@@ -225,7 +272,9 @@ contract DEFXStakingPool is Ownable {
     // Miscellaneous
     ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    // Enable recovery of ether sent by mistake to this contract's address.
+    /**
+     * @notice Enable recovery of ether sent by mistake to this contract's address.
+     */
     function drainStrayEther(uint _amount)
         external
         onlyOwner
@@ -235,7 +284,10 @@ contract DEFXStakingPool is Ownable {
         return true;
     }
 
-    // Enable recovery of any ERC20 compatible token sent by mistake to this contract's address.
+    /**
+     * @notice Enable recovery of any ERC20 compatible token sent by mistake to this contract's address.
+     * The only token that cannot be drained is DEFX.
+     */
     function drainStrayTokens(IERC20 _token, uint _amount)
         external
         onlyOwner
