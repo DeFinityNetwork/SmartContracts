@@ -88,13 +88,13 @@ contract DEFXStakingPool is Ownable {
         totalStakedAmount = totalStakedAmount.add(_amount);
         require(defxToken.balanceOf(address(this)) + _amount >= getMinContractBalance(), "Pool's balance too low for covering annual reward");
 
-        require(defxToken.transferFrom(_msgSender(), address(this), _amount), "Transfer failed");
-
         if(totalStakedBalances[_msgSender()] == 0)
             stakers.push(_msgSender());
         stakedBalances[_msgSender()].push(StakedBalance(block.timestamp, _amount));
 
         totalStakedBalances[_msgSender()] = totalStakedBalances[_msgSender()].add(_amount);
+
+        require(defxToken.transferFrom(_msgSender(), address(this), _amount), "Transfer failed");
     }
 
     /**
@@ -109,16 +109,16 @@ contract DEFXStakingPool is Ownable {
         collectReward(_msgSender());
         uint amountToUnstake = _amount;
 
-        for(uint i = stakedBalances[_msgSender()].length - 1; i >= 0; i--) 
+        for(uint i = stakedBalances[_msgSender()].length; i > 0; i--) 
         {
-            uint amount = stakedBalances[_msgSender()][i].amount;
+            uint amount = stakedBalances[_msgSender()][i-1].amount;
 
             if (amountToUnstake >= amount) {
                 amountToUnstake = amountToUnstake.sub(amount);
-                delete stakedBalances[_msgSender()][i];
+                delete stakedBalances[_msgSender()][i-1];
             }
             else { 
-                stakedBalances[_msgSender()][i].amount = amount.sub(amountToUnstake);
+                stakedBalances[_msgSender()][i-1].amount = amount.sub(amountToUnstake);
                 amountToUnstake = 0;    
             }
 
@@ -126,9 +126,9 @@ contract DEFXStakingPool is Ownable {
                 break;  
         }
 
-        require(defxToken.transfer(_msgSender(), _amount), "Transfer failed");
         totalStakedBalances[_msgSender()] = totalStakedBalances[_msgSender()].sub(_amount);
         totalStakedAmount = totalStakedAmount.sub(_amount);
+        require(defxToken.transfer(_msgSender(), _amount), "Transfer failed");
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -160,8 +160,8 @@ contract DEFXStakingPool is Ownable {
         collectReward(_staker);
         require(_amount <= earnedRewards[_staker], "Maximum redeemable reward is exceeded.");
 
-        require(defxToken.transfer(_staker, _amount), "Transfer failed.");
         earnedRewards[_staker] = earnedRewards[_staker].sub(_amount);
+        require(defxToken.transfer(_staker, _amount), "Transfer failed.");
     }
 
     function collectReward(address _staker)
@@ -199,7 +199,7 @@ contract DEFXStakingPool is Ownable {
      * @return Earned reward for the staker up to that moment for specified staker's address
      */
     function getEarnedReward(address _staker)
-        public
+        external
         view
         returns (uint)
     {
