@@ -29,7 +29,7 @@ module.exports.duration = {
     years: x => x * 60 * 60 * 24 * 365
 }
 
-module.exports.lastEVMTime = () => web3.eth.getBlock('latest').timestamp
+module.exports.lastEVMTime = async () => (await web3.eth.getBlock('latest')).timestamp
 
 module.exports.increaseEVMTime = async duration => {
     await promisify(web3.currentProvider.send.bind(web3.currentProvider))({
@@ -47,12 +47,41 @@ module.exports.increaseEVMTime = async duration => {
     })
 }
 
-module.exports.increaseEVMTimeTo = newTime => {
-    const currentTime = module.exports.lastEVMTime()
+module.exports.increaseEVMTimeTo = async newTime => {
+    //const currentTime = Math.round(Date.now()/1000)
+    const currentTime = await module.exports.lastEVMTime()
     if (newTime < currentTime)
-        throw Error(`Cannot increase current time(${currentTime}) to a moment in the past(${newTime})`)
+        return;
+        //throw Error(`Cannot increase current time(${currentTime}) to a moment in the past(${newTime})`)
     return module.exports.increaseEVMTime(newTime - currentTime)
 }
+
+module.exports.takeSnapshot = () => {
+    return new Promise((resolve, reject) => {
+        web3.currentProvider.send({
+          jsonrpc: '2.0',
+          method: 'evm_snapshot',
+          id: new Date().getTime()
+        }, (err, snapshotId) => {
+          if (err) { return reject(err) }
+          return resolve(snapshotId)
+        })
+      })
+  }
+  
+  module.exports.revertToSnapShot = (id) => {
+    return new Promise((resolve, reject) => {
+        web3.currentProvider.send({
+          jsonrpc: '2.0',
+          method: 'evm_revert',
+          params: [id],
+          id: new Date().getTime()
+        }, (err, result) => {
+          if (err) { return reject(err) }
+          return resolve(result)
+        })
+      })
+  }
 
 module.exports.reward = (stakingAmount, annualInterestRate, rewardTimeSpan, numberOfPeriods) => 
 (annualInterestRate.mul(rewardTimeSpan).div(web3.utils.toBN(module.exports.duration.days(365)))).mul(stakingAmount).mul(web3.utils.toBN(numberOfPeriods)).div(web3.utils.toBN(Math.pow(10,18)))
