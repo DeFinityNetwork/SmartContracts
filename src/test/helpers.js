@@ -47,6 +47,17 @@ module.exports.increaseEVMTime = async duration => {
     })
 }
 
+module.exports.increaseBlockNumber = async blockNumber => {
+  for(let i = 0; i< blockNumber; i++) {
+    await promisify(web3.currentProvider.send.bind(web3.currentProvider))({
+      jsonrpc: '2.0',
+      method: 'evm_mine',
+      params: [],
+      id: new Date().getSeconds()
+    })
+  }
+}
+
 module.exports.increaseEVMTimeTo = async newTime => {
     //const currentTime = Math.round(Date.now()/1000)
     const currentTime = await module.exports.lastEVMTime()

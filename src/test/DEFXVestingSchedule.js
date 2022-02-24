@@ -1164,6 +1164,489 @@ contract('DEFXVestingSchedule', accounts => {
         assert(investorDefxBalanceAfter.eq(investorDefxBalanceBefore), 'Investor balance not expected to change')
         assert(contractDefxBalanceAfter.eq(contractDefxBalanceBefore), 'Contract balance not expected to change')
     }) 
+
+    it('allow contract owner to change restricted state', async () => {
+        // ARRANGE
+        const investors = [ethAddress1, ethAddress2, ethAddress3, ethAddress4, ethAddress5]
+        const seedInvestments = [e18(0), e18(3333334), e18(0), e18(166667), e18(1000000)]
+        const privateInvestments = [e18(71429), e18(1428572), e18(1428572), e18(0), e18(428572)]
+        const withdrawnTokens = [e18(10714), e18(547619), e18(214286), e18(16667), e18(164286)]
+
+        const privatePercentage = privateSchedulePercentages[0] + privateSchedulePercentages[1] + privateSchedulePercentages[2] + privateSchedulePercentages[3]
+        const tokenQty1 = (privateInvestments[0].mul(web3.utils.toBN(privatePercentage)).div(web3.utils.toBN(100)))
+            .sub(withdrawnTokens[0])
+
+        let totalTokenQty = tokenQty1.add(e18(1))
+
+        defxVestingSchedule = await DEFXVestingSchedule.new(
+            defxToken.address, 
+            seedScheduleEvents, 
+            seedSchedulePercentages,
+            privateScheduleEvents,
+            privateSchedulePercentages,
+            investors,
+            seedInvestments,
+            privateInvestments,
+            withdrawnTokens)
+
+        await defxToken.transfer(defxVestingSchedule.address, totalTokenQty, {from: admin})
+        await helpers.increaseEVMTimeTo(seedScheduleEvents[3])
+        
+        const restrictionStateBefore = await defxVestingSchedule.isRestricted()
+
+        // ACT
+        await defxVestingSchedule.setRestrictedState(true, {from: admin})
+        const restrictionStateAfter1 = await defxVestingSchedule.isRestricted()
+
+        await defxVestingSchedule.setRestrictedState(false, {from: admin})
+        const restrictionStateAfter2 = await defxVestingSchedule.isRestricted()
+
+        // ASSERT
+        assert(restrictionStateBefore != restrictionStateAfter1, 'Restriction state expected to change')
+        assert(restrictionStateAfter1 != restrictionStateAfter2, 'Restriction state expected to change')
+        assert(!restrictionStateBefore, 'Restriction state before mismatch')
+        assert(restrictionStateAfter1, 'Restriction state after 1 mismatch')
+        assert(!restrictionStateAfter2, 'Restriction state after 2 mismatch')
+    }) 
+
+    it('reject changing restricted state if not called by contract owner', async () => {
+        // ARRANGE
+        const investors = [ethAddress1, ethAddress2, ethAddress3, ethAddress4, ethAddress5]
+        const seedInvestments = [e18(0), e18(3333334), e18(0), e18(166667), e18(1000000)]
+        const privateInvestments = [e18(71429), e18(1428572), e18(1428572), e18(0), e18(428572)]
+        const withdrawnTokens = [e18(10714), e18(547619), e18(214286), e18(16667), e18(164286)]
+
+        const privatePercentage = privateSchedulePercentages[0] + privateSchedulePercentages[1] + privateSchedulePercentages[2] + privateSchedulePercentages[3]
+        const tokenQty1 = (privateInvestments[0].mul(web3.utils.toBN(privatePercentage)).div(web3.utils.toBN(100)))
+            .sub(withdrawnTokens[0])
+
+        let totalTokenQty = tokenQty1.add(e18(1))
+
+        defxVestingSchedule = await DEFXVestingSchedule.new(
+            defxToken.address, 
+            seedScheduleEvents, 
+            seedSchedulePercentages,
+            privateScheduleEvents,
+            privateSchedulePercentages,
+            investors,
+            seedInvestments,
+            privateInvestments,
+            withdrawnTokens)
+
+        await defxToken.transfer(defxVestingSchedule.address, totalTokenQty, {from: admin})
+        await helpers.increaseEVMTimeTo(seedScheduleEvents[3])
+        
+        const restrictionStateBefore = await defxVestingSchedule.isRestricted()
+
+        // ACT
+        await helpers.shouldFail(defxVestingSchedule.setRestrictedState(true, {from: ethAddress1}))
+        const restrictionStateAfter = await defxVestingSchedule.isRestricted()
+
+        // ASSERT
+        assert(restrictionStateBefore == restrictionStateAfter, 'Restriction state not expected to change')
+    }) 
+
+    it('disable withdrawals in restricted state', async () => {
+        // ARRANGE
+        const investors = [ethAddress1, ethAddress2, ethAddress3, ethAddress4, ethAddress5]
+        const seedInvestments = [e18(0), e18(3333334), e18(0), e18(166667), e18(1000000)]
+        const privateInvestments = [e18(71429), e18(1428572), e18(1428572), e18(0), e18(428572)]
+        const withdrawnTokens = [e18(10714), e18(547619), e18(214286), e18(16667), e18(164286)]
+
+        const privatePercentage = privateSchedulePercentages[0] + privateSchedulePercentages[1] + privateSchedulePercentages[2] + privateSchedulePercentages[3]
+        const tokenQty1 = (privateInvestments[0].mul(web3.utils.toBN(privatePercentage)).div(web3.utils.toBN(100)))
+            .sub(withdrawnTokens[0])
+
+        let totalTokenQty = tokenQty1.add(e18(1))
+
+        defxVestingSchedule = await DEFXVestingSchedule.new(
+            defxToken.address, 
+            seedScheduleEvents, 
+            seedSchedulePercentages,
+            privateScheduleEvents,
+            privateSchedulePercentages,
+            investors,
+            seedInvestments,
+            privateInvestments,
+            withdrawnTokens)
+
+        await defxToken.transfer(defxVestingSchedule.address, totalTokenQty, {from: admin})
+        await helpers.increaseEVMTimeTo(seedScheduleEvents[3])
+
+        const availableTokensBefore = await defxVestingSchedule.getAvailableTokens(investors[0])
+        const investorDefxBalanceBefore = await defxToken.balanceOf(investors[0])
+        const contractDefxBalanceBefore = await defxToken.balanceOf(defxVestingSchedule.address)
+        
+        await defxVestingSchedule.setRestrictedState(true, {from: admin})
+        const restrictionState = await defxVestingSchedule.isRestricted()
+
+        // ACT
+        await helpers.shouldFail(defxVestingSchedule.withdrawTokens(tokenQty1, {from: investors[0]}))
+
+        // ASSERT
+        const availableTokensAfter = await defxVestingSchedule.getAvailableTokens(investors[0])
+        const investorDefxBalanceAfter = await defxToken.balanceOf(investors[0])
+        const contractDefxBalanceAfter = await defxToken.balanceOf(defxVestingSchedule.address)
+
+        assert(restrictionState, 'Restriction state mismatch')
+        assert(availableTokensAfter.eq(availableTokensBefore), 'Available tokens not expected to change')
+        assert(investorDefxBalanceAfter.eq(investorDefxBalanceBefore), 'Investor balance not expected to change')
+        assert(contractDefxBalanceAfter.eq(contractDefxBalanceBefore), 'Contract balance not expected to change')
+    }) 
+
+    it('disable withdrawals to investor in restricted state', async () => {
+        // ARRANGE
+        const investors = [ethAddress1, ethAddress2, ethAddress3, ethAddress4, ethAddress5]
+        const seedInvestments = [e18(0), e18(3333334), e18(0), e18(166667), e18(1000000)]
+        const privateInvestments = [e18(71429), e18(1428572), e18(1428572), e18(0), e18(428572)]
+        const withdrawnTokens = [e18(10714), e18(547619), e18(214286), e18(16667), e18(164286)]
+
+        const privatePercentage = privateSchedulePercentages[0] + privateSchedulePercentages[1] + privateSchedulePercentages[2] + privateSchedulePercentages[3]
+        const tokenQty1 = (privateInvestments[0].mul(web3.utils.toBN(privatePercentage)).div(web3.utils.toBN(100)))
+            .sub(withdrawnTokens[0])
+
+        let totalTokenQty = tokenQty1.add(e18(1))
+
+        defxVestingSchedule = await DEFXVestingSchedule.new(
+            defxToken.address, 
+            seedScheduleEvents, 
+            seedSchedulePercentages,
+            privateScheduleEvents,
+            privateSchedulePercentages,
+            investors,
+            seedInvestments,
+            privateInvestments,
+            withdrawnTokens)
+
+        await defxToken.transfer(defxVestingSchedule.address, totalTokenQty, {from: admin})
+        await helpers.increaseEVMTimeTo(seedScheduleEvents[3])
+
+        const availableTokensBefore = await defxVestingSchedule.getAvailableTokens(investors[0])
+        const investorDefxBalanceBefore = await defxToken.balanceOf(investors[0])
+        const contractDefxBalanceBefore = await defxToken.balanceOf(defxVestingSchedule.address)
+        
+        await defxVestingSchedule.setRestrictedState(true, {from: admin})
+        const restrictionState = await defxVestingSchedule.isRestricted()
+
+        // ACT
+        await helpers.shouldFail(defxVestingSchedule.withdrawTokensToInvestor(investors[0], tokenQty1, {from: admin}))
+
+        // ASSERT
+        const availableTokensAfter = await defxVestingSchedule.getAvailableTokens(investors[0])
+        const investorDefxBalanceAfter = await defxToken.balanceOf(investors[0])
+        const contractDefxBalanceAfter = await defxToken.balanceOf(defxVestingSchedule.address)
+
+        assert(restrictionState, 'Restriction state mismatch')
+        assert(availableTokensAfter.eq(availableTokensBefore), 'Available tokens not expected to change')
+        assert(investorDefxBalanceAfter.eq(investorDefxBalanceBefore), 'Investor balance not expected to change')
+        assert(contractDefxBalanceAfter.eq(contractDefxBalanceBefore), 'Contract balance not expected to change')
+    }) 
+
+    it('allow withdrawals after removing restricted state', async () => {
+        // ARRANGE
+        const investors = [ethAddress1, ethAddress2, ethAddress3, ethAddress4, ethAddress5]
+        const seedInvestments = [e18(0), e18(3333334), e18(0), e18(166667), e18(1000000)]
+        const privateInvestments = [e18(71429), e18(1428572), e18(1428572), e18(0), e18(428572)]
+        const withdrawnTokens = [e18(10714), e18(547619), e18(214286), e18(16667), e18(164286)]
+
+        const privatePercentage = privateSchedulePercentages[0] + privateSchedulePercentages[1] + privateSchedulePercentages[2] + privateSchedulePercentages[3]
+        const tokenQty1 = (privateInvestments[0].mul(web3.utils.toBN(privatePercentage)).div(web3.utils.toBN(100)))
+            .sub(withdrawnTokens[0])
+
+        let totalTokenQty = tokenQty1.add(e18(1))
+
+        defxVestingSchedule = await DEFXVestingSchedule.new(
+            defxToken.address, 
+            seedScheduleEvents, 
+            seedSchedulePercentages,
+            privateScheduleEvents,
+            privateSchedulePercentages,
+            investors,
+            seedInvestments,
+            privateInvestments,
+            withdrawnTokens)
+
+        await defxToken.transfer(defxVestingSchedule.address, totalTokenQty, {from: admin})
+        await helpers.increaseEVMTimeTo(seedScheduleEvents[3])
+        
+        await defxVestingSchedule.setRestrictedState(true, {from: admin})
+        const restrictionStateBefore = await defxVestingSchedule.isRestricted()
+
+        await helpers.shouldFail(defxVestingSchedule.withdrawTokens(tokenQty1, {from: investors[0]}))
+
+        const availableTokensBefore = await defxVestingSchedule.getAvailableTokens(investors[0])
+        const investorDefxBalanceBefore = await defxToken.balanceOf(investors[0])
+        const contractDefxBalanceBefore = await defxToken.balanceOf(defxVestingSchedule.address)
+
+        await defxVestingSchedule.setRestrictedState(false, {from: admin})
+
+        // ACT
+        await defxVestingSchedule.withdrawTokens(tokenQty1, {from: investors[0]})
+
+        // ASSERT
+        const restrictionStateAfter = await defxVestingSchedule.isRestricted()
+        const availableTokensAfter = await defxVestingSchedule.getAvailableTokens(investors[0])
+        const investorDefxBalanceAfter = await defxToken.balanceOf(investors[0])
+        const contractDefxBalanceAfter = await defxToken.balanceOf(defxVestingSchedule.address)
+
+        assert(restrictionStateBefore != restrictionStateAfter, 'Restriction state expected to change')
+        assert(!restrictionStateAfter, 'Restriction state mismatch')
+
+        assert(!availableTokensAfter.eq(availableTokensBefore), 'Available tokens expected to change')
+        assert(!investorDefxBalanceAfter.eq(investorDefxBalanceBefore), 'Investor balance expected to change')
+        assert(!contractDefxBalanceAfter.eq(contractDefxBalanceBefore), 'Contract balance expected to change')
+
+        assert(availableTokensAfter.eq(availableTokensBefore.sub(tokenQty1)), 'Available tokens mismatch')
+        assert(investorDefxBalanceAfter.eq(investorDefxBalanceBefore.add(tokenQty1)), 'Investor balance mismatch')
+        assert(contractDefxBalanceAfter.eq(contractDefxBalanceBefore.sub(tokenQty1)), 'Contract balance mismatch')
+    }) 
+
+    it('allow withdrawals to investor after removing restricted state', async () => {
+        // ARRANGE
+        const investors = [ethAddress1, ethAddress2, ethAddress3, ethAddress4, ethAddress5]
+        const seedInvestments = [e18(0), e18(3333334), e18(0), e18(166667), e18(1000000)]
+        const privateInvestments = [e18(71429), e18(1428572), e18(1428572), e18(0), e18(428572)]
+        const withdrawnTokens = [e18(10714), e18(547619), e18(214286), e18(16667), e18(164286)]
+
+        const privatePercentage = privateSchedulePercentages[0] + privateSchedulePercentages[1] + privateSchedulePercentages[2] + privateSchedulePercentages[3]
+        const tokenQty1 = (privateInvestments[0].mul(web3.utils.toBN(privatePercentage)).div(web3.utils.toBN(100)))
+            .sub(withdrawnTokens[0])
+
+        let totalTokenQty = tokenQty1.add(e18(1))
+
+        defxVestingSchedule = await DEFXVestingSchedule.new(
+            defxToken.address, 
+            seedScheduleEvents, 
+            seedSchedulePercentages,
+            privateScheduleEvents,
+            privateSchedulePercentages,
+            investors,
+            seedInvestments,
+            privateInvestments,
+            withdrawnTokens)
+
+        await defxToken.transfer(defxVestingSchedule.address, totalTokenQty, {from: admin})
+        await helpers.increaseEVMTimeTo(seedScheduleEvents[3])
+        
+        await defxVestingSchedule.setRestrictedState(true, {from: admin})
+        const restrictionStateBefore = await defxVestingSchedule.isRestricted()
+
+        await helpers.shouldFail(defxVestingSchedule.withdrawTokensToInvestor(investors[0], tokenQty1, {from: admin}))
+
+        const availableTokensBefore = await defxVestingSchedule.getAvailableTokens(investors[0])
+        const investorDefxBalanceBefore = await defxToken.balanceOf(investors[0])
+        const contractDefxBalanceBefore = await defxToken.balanceOf(defxVestingSchedule.address)
+
+        await defxVestingSchedule.setRestrictedState(false, {from: admin})
+
+        // ACT
+        await defxVestingSchedule.withdrawTokensToInvestor(investors[0], tokenQty1, {from: admin})
+
+        // ASSERT
+        const restrictionStateAfter = await defxVestingSchedule.isRestricted()
+        const availableTokensAfter = await defxVestingSchedule.getAvailableTokens(investors[0])
+        const investorDefxBalanceAfter = await defxToken.balanceOf(investors[0])
+        const contractDefxBalanceAfter = await defxToken.balanceOf(defxVestingSchedule.address)
+
+        assert(restrictionStateBefore != restrictionStateAfter, 'Restriction state expected to change')
+        assert(!restrictionStateAfter, 'Restriction state mismatch')
+
+        assert(!availableTokensAfter.eq(availableTokensBefore), 'Available tokens expected to change')
+        assert(!investorDefxBalanceAfter.eq(investorDefxBalanceBefore), 'Investor balance expected to change')
+        assert(!contractDefxBalanceAfter.eq(contractDefxBalanceBefore), 'Contract balance expected to change')
+
+        assert(availableTokensAfter.eq(availableTokensBefore.sub(tokenQty1)), 'Available tokens mismatch')
+        assert(investorDefxBalanceAfter.eq(investorDefxBalanceBefore.add(tokenQty1)), 'Investor balance mismatch')
+        assert(contractDefxBalanceAfter.eq(contractDefxBalanceBefore.sub(tokenQty1)), 'Contract balance mismatch')
+    })
+    
+    it('allow emergency withdrawal in restricted state by contract owner', async () => {
+        // ARRANGE
+        const investors = [ethAddress1, ethAddress2, ethAddress3, ethAddress4, ethAddress5]
+        const seedInvestments = [e18(0), e18(3333334), e18(0), e18(166667), e18(1000000)]
+        const privateInvestments = [e18(71429), e18(1428572), e18(1428572), e18(0), e18(428572)]
+        const withdrawnTokens = [e18(10714), e18(547619), e18(214286), e18(16667), e18(164286)]
+
+        const privatePercentage = privateSchedulePercentages[0] + privateSchedulePercentages[1] + privateSchedulePercentages[2] + privateSchedulePercentages[3]
+        const tokenQty1 = (privateInvestments[0].mul(web3.utils.toBN(privatePercentage)).div(web3.utils.toBN(100)))
+            .sub(withdrawnTokens[0])
+
+        let totalTokenQty = tokenQty1.add(e18(1))
+
+        defxVestingSchedule = await DEFXVestingSchedule.new(
+            defxToken.address, 
+            seedScheduleEvents, 
+            seedSchedulePercentages,
+            privateScheduleEvents,
+            privateSchedulePercentages,
+            investors,
+            seedInvestments,
+            privateInvestments,
+            withdrawnTokens)
+
+        await defxToken.transfer(defxVestingSchedule.address, totalTokenQty, {from: admin})
+        await helpers.increaseEVMTimeTo(seedScheduleEvents[3])
+        
+        await defxVestingSchedule.setRestrictedState(true, {from: admin})
+
+        const restrictionState = await defxVestingSchedule.isRestricted()
+        const adminDefxBalanceBefore = await defxToken.balanceOf(admin)
+        const contractDefxBalanceBefore = await defxToken.balanceOf(defxVestingSchedule.address)
+
+        // ACT
+        await defxVestingSchedule.withdrawRestrictedTokens(totalTokenQty, {from: admin})
+
+        // ASSERT
+        const adminDefxBalanceAfter = await defxToken.balanceOf(admin)
+        const contractDefxBalanceAfter = await defxToken.balanceOf(defxVestingSchedule.address)
+
+        assert(restrictionState, 'Restriction state mismatch')
+
+        assert(!adminDefxBalanceAfter.eq(adminDefxBalanceBefore), 'Admin balance expected to change')
+        assert(!contractDefxBalanceAfter.eq(contractDefxBalanceBefore), 'Contract balance expected to change')
+
+        assert(adminDefxBalanceAfter.eq(adminDefxBalanceBefore.add(totalTokenQty)), 'Investor balance mismatch')
+        assert(contractDefxBalanceAfter.eq(contractDefxBalanceBefore.sub(totalTokenQty)), 'Contract balance mismatch')
+    }) 
+
+    it('reject emergency withdrawal by contract owner if not in restricted state', async () => {
+        // ARRANGE
+        const investors = [ethAddress1, ethAddress2, ethAddress3, ethAddress4, ethAddress5]
+        const seedInvestments = [e18(0), e18(3333334), e18(0), e18(166667), e18(1000000)]
+        const privateInvestments = [e18(71429), e18(1428572), e18(1428572), e18(0), e18(428572)]
+        const withdrawnTokens = [e18(10714), e18(547619), e18(214286), e18(16667), e18(164286)]
+
+        const privatePercentage = privateSchedulePercentages[0] + privateSchedulePercentages[1] + privateSchedulePercentages[2] + privateSchedulePercentages[3]
+        const tokenQty1 = (privateInvestments[0].mul(web3.utils.toBN(privatePercentage)).div(web3.utils.toBN(100)))
+            .sub(withdrawnTokens[0])
+
+        let totalTokenQty = tokenQty1.add(e18(1))
+
+        defxVestingSchedule = await DEFXVestingSchedule.new(
+            defxToken.address, 
+            seedScheduleEvents, 
+            seedSchedulePercentages,
+            privateScheduleEvents,
+            privateSchedulePercentages,
+            investors,
+            seedInvestments,
+            privateInvestments,
+            withdrawnTokens)
+
+        await defxToken.transfer(defxVestingSchedule.address, totalTokenQty, {from: admin})
+        await helpers.increaseEVMTimeTo(seedScheduleEvents[3])
+
+        const restrictionState = await defxVestingSchedule.isRestricted()
+        const adminDefxBalanceBefore = await defxToken.balanceOf(admin)
+        const contractDefxBalanceBefore = await defxToken.balanceOf(defxVestingSchedule.address)
+
+        // ACT
+        await helpers.shouldFail(defxVestingSchedule.withdrawRestrictedTokens(totalTokenQty, {from: admin}))
+
+        // ASSERT
+        const adminDefxBalanceAfter = await defxToken.balanceOf(admin)
+        const contractDefxBalanceAfter = await defxToken.balanceOf(defxVestingSchedule.address)
+
+        assert(!restrictionState, 'Restriction state mismatch')
+
+        assert(adminDefxBalanceAfter.eq(adminDefxBalanceBefore), 'Admin balance not expected to change')
+        assert(contractDefxBalanceAfter.eq(contractDefxBalanceBefore), 'Contract balance not expected to change')
+    }) 
+
+    it('reject emergency withdrawal if amount greater than contract balance', async () => {
+        // ARRANGE
+        const investors = [ethAddress1, ethAddress2, ethAddress3, ethAddress4, ethAddress5]
+        const seedInvestments = [e18(0), e18(3333334), e18(0), e18(166667), e18(1000000)]
+        const privateInvestments = [e18(71429), e18(1428572), e18(1428572), e18(0), e18(428572)]
+        const withdrawnTokens = [e18(10714), e18(547619), e18(214286), e18(16667), e18(164286)]
+
+        const privatePercentage = privateSchedulePercentages[0] + privateSchedulePercentages[1] + privateSchedulePercentages[2] + privateSchedulePercentages[3]
+        const tokenQty1 = (privateInvestments[0].mul(web3.utils.toBN(privatePercentage)).div(web3.utils.toBN(100)))
+            .sub(withdrawnTokens[0])
+
+        let totalTokenQty = tokenQty1.add(e18(1))
+
+        defxVestingSchedule = await DEFXVestingSchedule.new(
+            defxToken.address, 
+            seedScheduleEvents, 
+            seedSchedulePercentages,
+            privateScheduleEvents,
+            privateSchedulePercentages,
+            investors,
+            seedInvestments,
+            privateInvestments,
+            withdrawnTokens)
+
+        await defxToken.transfer(defxVestingSchedule.address, totalTokenQty, {from: admin})
+        await helpers.increaseEVMTimeTo(seedScheduleEvents[3])
+
+        await defxVestingSchedule.setRestrictedState(true, {from: admin})
+
+        const restrictionState = await defxVestingSchedule.isRestricted()
+        const adminDefxBalanceBefore = await defxToken.balanceOf(admin)
+        const contractDefxBalanceBefore = await defxToken.balanceOf(defxVestingSchedule.address)
+
+        // ACT
+        await helpers.shouldFail(defxVestingSchedule.withdrawRestrictedTokens(totalTokenQty.add(e18(1)), {from: admin}))
+
+        // ASSERT
+        const adminDefxBalanceAfter = await defxToken.balanceOf(admin)
+        const contractDefxBalanceAfter = await defxToken.balanceOf(defxVestingSchedule.address)
+
+        assert(restrictionState, 'Restriction state mismatch')
+
+        assert(adminDefxBalanceAfter.eq(adminDefxBalanceBefore), 'Admin balance not expected to change')
+        assert(contractDefxBalanceAfter.eq(contractDefxBalanceBefore), 'Contract balance not expected to change')
+    }) 
+
+    it('reject emergency withdrawal if not called by contract owner', async () => {
+        // ARRANGE
+        const investors = [ethAddress1, ethAddress2, ethAddress3, ethAddress4, ethAddress5]
+        const seedInvestments = [e18(0), e18(3333334), e18(0), e18(166667), e18(1000000)]
+        const privateInvestments = [e18(71429), e18(1428572), e18(1428572), e18(0), e18(428572)]
+        const withdrawnTokens = [e18(10714), e18(547619), e18(214286), e18(16667), e18(164286)]
+
+        const privatePercentage = privateSchedulePercentages[0] + privateSchedulePercentages[1] + privateSchedulePercentages[2] + privateSchedulePercentages[3]
+        const tokenQty1 = (privateInvestments[0].mul(web3.utils.toBN(privatePercentage)).div(web3.utils.toBN(100)))
+            .sub(withdrawnTokens[0])
+
+        let totalTokenQty = tokenQty1.add(e18(1))
+
+        defxVestingSchedule = await DEFXVestingSchedule.new(
+            defxToken.address, 
+            seedScheduleEvents, 
+            seedSchedulePercentages,
+            privateScheduleEvents,
+            privateSchedulePercentages,
+            investors,
+            seedInvestments,
+            privateInvestments,
+            withdrawnTokens)
+
+        await defxToken.transfer(defxVestingSchedule.address, totalTokenQty, {from: admin})
+        await helpers.increaseEVMTimeTo(seedScheduleEvents[3])
+
+        await defxVestingSchedule.setRestrictedState(true, {from: admin})
+
+        const restrictionState = await defxVestingSchedule.isRestricted()
+        const adminDefxBalanceBefore = await defxToken.balanceOf(admin)
+        const investorDefxBalanceBefore = await defxToken.balanceOf(investors[0])
+        const contractDefxBalanceBefore = await defxToken.balanceOf(defxVestingSchedule.address)
+
+        // ACT
+        await helpers.shouldFail(defxVestingSchedule.withdrawRestrictedTokens(totalTokenQty, {from: investors[0]}))
+
+        // ASSERT
+        const adminDefxBalanceAfter = await defxToken.balanceOf(admin)
+        const investorDefxBalanceAfter = await defxToken.balanceOf(investors[0])
+        const contractDefxBalanceAfter = await defxToken.balanceOf(defxVestingSchedule.address)
+
+        assert(restrictionState, 'Restriction state mismatch')
+
+        assert(adminDefxBalanceAfter.eq(adminDefxBalanceBefore), 'Admin balance not expected to change')
+        assert(investorDefxBalanceAfter.eq(investorDefxBalanceBefore), 'Admin balance not expected to change')
+        assert(contractDefxBalanceAfter.eq(contractDefxBalanceBefore), 'Contract balance not expected to change')
+    }) 
     
     it('reject draining DEFX', async() => {
         // ARRANGE

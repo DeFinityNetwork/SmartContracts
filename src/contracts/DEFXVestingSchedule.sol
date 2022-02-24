@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.6.12;
+pragma solidity 0.8.0;
 
 import '@openzeppelin/contracts/access/Ownable.sol';
-import '@openzeppelin/contracts/math/SafeMath.sol';
+import '@openzeppelin/contracts/utils/math/SafeMath.sol';
 import './DEFXToken.sol';
 
 contract DEFXVestingSchedule is Ownable {
@@ -17,6 +17,8 @@ contract DEFXVestingSchedule is Ownable {
     mapping (address => uint) public seedInvestments;
     mapping (address => uint) public privateInvestments;
     mapping (address => uint) public withdrawnTokens;
+
+    bool public isRestricted;
 
     constructor(
         address _tokenContractAddress, 
@@ -61,6 +63,8 @@ contract DEFXVestingSchedule is Ownable {
             privateInvestments[_investors[i]] = _privateInvestments[i];
             withdrawnTokens[_investors[i]] = _withdrawnTokens[i];
         }
+
+        isRestricted = false;
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -107,6 +111,7 @@ contract DEFXVestingSchedule is Ownable {
      */
     function withdrawTokens(uint _amount)
         external
+        notRestricted
     {
         withdrawTokens(_msgSender(), _amount);
     }
@@ -117,6 +122,7 @@ contract DEFXVestingSchedule is Ownable {
     function withdrawTokensToInvestor(address _investor, uint _amount)
         external
         onlyOwner
+        notRestricted
     {
         withdrawTokens(_investor, _amount);
     }
@@ -130,6 +136,31 @@ contract DEFXVestingSchedule is Ownable {
         withdrawnTokens[_investor] = withdrawnTokens[_investor].add(_amount);
 
         require(defxToken.transfer(_investor, _amount), "Transfer failed.");
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    // Restrictions
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+
+    function withdrawRestrictedTokens(uint _amount)
+        external
+        onlyOwner
+    {
+        require(isRestricted, "Temporary withdrawal is only possible in restricted state.");
+        require(defxToken.transfer(owner(), _amount), "Transfer failed.");
+    }
+
+
+    function setRestrictedState(bool _isRestricted)
+        external
+        onlyOwner
+    {
+        isRestricted = _isRestricted;
+    }
+
+    modifier notRestricted() {
+        require(!isRestricted, "Withdrawing tokens is temporarily restricted.");
+        _;
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////
